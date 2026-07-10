@@ -6,6 +6,7 @@ import { registerList } from "./commands/list.js";
 import { registerWorker } from "./commands/worker.js";
 import { registerConfig } from "./commands/config.js";
 import { registerDLQ } from "./commands/dlq.js";
+import db from "./db/database.js";
 // Initialize 
 const program = new Command();
 program
