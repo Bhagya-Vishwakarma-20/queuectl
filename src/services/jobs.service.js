@@ -1,0 +1,46 @@
+import { randomUUID } from "crypto";
+import { listJobs, markCompleted, markDead, markFailed } from "../db/jobs.db.js";
+import { getConfig } from "./config.service.js";
+const config = getConfig();
+// list jobs 
+export function getJobs(state) {
+    try {
+        if(state){
+            const validStates = ["pending", "processing", "completed", "failed", "dead"];
+            if(!validStates.includes(state)){
+                throw new Error("Invalid state");
+            }
+        }
+        return listJobs(state);
+    }catch (err) {
+        throw new Error(err.message);
+    }
+}
+// handle success
+export function handleSuccess(job){
+    try {
+        markCompleted(job.id);
+    }
+    catch(err){
+        console.error(err.message);
+    }
+}
+//handle failure
+export function handleFailure(job){
+    try {
+        const attempts =  Number(job.attempts)+1; // this time 
+        const max_retries = config.max-retries;
+        if(attempts > max_retries){
+            // move to dlq;
+            markDead(job.id , attempts);
+        }
+        else {
+            const nextRetryTime = new Date( (Math.pow(config.backoffBase,attempts))*1000 + Date.now() ).toISOString();
+            markFailed(job.id, attempts, nextRetryTime);
+        }
+    }
+    catch(err){
+        console.error(err.message);
+    }
+}
+

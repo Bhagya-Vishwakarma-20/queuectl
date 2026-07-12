@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { getDLQJobs, retryDLQJob } from "../services/dlq.service.js";
 
 export function registerDLQ(program) {
     const dlq = program
@@ -7,12 +7,13 @@ export function registerDLQ(program) {
 
     dlq.command("list")
         .action(() => {
-            console.log("DLQ List");
+            const data = getDLQJobs();
+            console.log(data);
         });
 
     dlq.command("retry")
         .argument("<id>")
         .action((id) => {
-            console.log("Retry:", id);
+            retryDLQJob(id);
         });
 }

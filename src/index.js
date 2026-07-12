@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { registerEnqueue } from "./commands/enqueue.js";
-import { registerStatus } from "./commands/status.js";
-import { registerList } from "./commands/list.js";
-import { registerWorker } from "./commands/worker.js";
-import { registerConfig } from "./commands/config.js";
-import { registerDLQ } from "./commands/dlq.js";
+import { registerEnqueue } from "./commands/enqueue.command.js";
+import { registerStatus } from "./commands/status.command.js";
+import { registerList } from "./commands/list.command.js";
+import { registerWorker } from "./commands/worker.command.js";
+import { registerConfig } from "./commands/config.command.js";
+import { registerDLQ } from "./commands/dlq.command.js";
 import db from "./db/database.js";
 // Initialize 
 const program = new Command();
