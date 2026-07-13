@@ -50,7 +50,7 @@ export function startWorkers(count) {
 export function recoverExpiredJobs() {
     const WORKER_TIMEOUT = getConfigByKey("worker-timeout");
     try {
-        const cutoff = new Date(Date.now() - WORKER_TIMEOUT).toISOString();
+        const cutoff = new Date(Date.now() - WORKER_TIMEOUT).toISOString(); // 30s
         const workers = getExpiredWorkers(cutoff);
         for (const worker of workers) {
             const result = recoverWorkerJobs(worker.id);
