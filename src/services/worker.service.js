@@ -39,8 +39,15 @@ export function startWorkers(count) {
         console.log("Gracefully shutting down...");
         clearInterval(recoveryTimer);
         clearInterval(stopTimer);
+        if (exitedWorkers === workers.length) {
+            removeSupervisor();
+            console.log("All workers exited.");
+            process.exit(0);
+        }
         for (const worker of workers) {
-            worker.send({ type: "shutdown" });
+            if (worker.connected) {
+                worker.send({ type: "shutdown" });
+            }
         }
     }
     process.on("SIGINT", gracefulShutdown);
