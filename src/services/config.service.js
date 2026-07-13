@@ -19,9 +19,11 @@ export function getConfig (){
 }
 export const getConfigByKey = (key)=>{
     try{
-        const value = getConfigFromDbByKey(key).value;
-        default_config[key] =value;
-        return value;
+       const row = getConfigFromDbByKey(key);
+        if (row !== undefined) {
+            default_config[key] = Number(row.value);
+        }
+        return default_config[key];
     }
     catch(err){
         console.error(err.message);
