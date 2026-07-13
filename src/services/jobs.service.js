@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { listJobs, markCompleted, markDead, markFailed } from "../db/jobs.db.js";
 import { getConfig } from "./config.service.js";
-const config = getConfig();
 // list jobs 
 export function getJobs(state) {
     try {
@@ -28,14 +27,15 @@ export function handleSuccess(job){
 //handle failure
 export function handleFailure(job){
     try {
+        const config = getConfig();
         const attempts =  Number(job.attempts)+1; // this time 
-        const max_retries = config.max-retries;
+        const max_retries = config["max-retries"];
         if(attempts > max_retries){
             // move to dlq;
             markDead(job.id , attempts);
         }
         else {
-            const nextRetryTime = new Date( (Math.pow(config.backoffBase,attempts))*1000 + Date.now() ).toISOString();
+            const nextRetryTime = new Date( (Math.pow(config["backoff-base"],attempts))*1000 + Date.now() ).toISOString();
             markFailed(job.id, attempts, nextRetryTime);
         }
     }

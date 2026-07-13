@@ -12,5 +12,4 @@ export function registerEnqueue(program) {
                 console.error(err.message);
             }
         });
-        
 }

@@ -9,7 +9,7 @@ export function getConfig (){
     try{
         const rows = getConfigFromDb();
         for (const row of rows){
-            default_config[row.key] = Number(row.value);
+            if(default_config[row.key])default_config[row.key] = Number(row.value);
         }
         return default_config;
     }

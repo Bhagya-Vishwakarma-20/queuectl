@@ -8,7 +8,6 @@ export function registerConfig(program) {
         .action(()=>{
             console.log(getConfig());
         })
-
     config
         .command("set")
         .argument("<key>")

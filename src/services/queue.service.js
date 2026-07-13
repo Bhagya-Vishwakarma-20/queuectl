@@ -2,7 +2,6 @@ import { getWorkerCount } from "../db/workers.db.js";
 import { randomUUID } from "crypto";
 import { createJob , getJobsCountGroupedByState } from "../db/jobs.db.js";
 import { getConfig } from "./config.service.js";
-
 // enqueue job
 export function enqueueJob(jobPayload){
     const input = JSON.parse(jobPayload);
@@ -14,7 +13,7 @@ export function enqueueJob(jobPayload){
         command: input.command,
         state: "pending",
         attempts: 0,
-        max_retries: config.max-retries,
+        max_retries: config["max-retries"],
         worker_id: null,
         next_retry_at: null,
         created_at: now,
