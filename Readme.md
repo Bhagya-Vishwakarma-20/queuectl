@@ -7,9 +7,9 @@
 
 Demo video:
 
-```
-<[Demo](https://drive.google.com/file/d/1PTwfydL6YGTubXUZsmuayplkxbjYLzjb/view?usp=sharing)>
-```
+
+[Demo Video](https://drive.google.com/file/d/1PTwfydL6YGTubXUZsmuayplkxbjYLzjb/view?usp=sharing)
+
 
 
 # Features
