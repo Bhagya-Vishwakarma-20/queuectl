@@ -9,6 +9,7 @@ const workers = [];
 let exitedWorkers = 0;
 let shuttingDown = false;
 export function startWorkers(count) {
+    if (count < 1) throw Error("Count must be greater than 0");
     registerSupervisor(count);
     for (let i = 0; i < count; i++) {
         //start worker

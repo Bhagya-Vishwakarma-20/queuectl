@@ -13,7 +13,6 @@ program
   .name("queuectl")
   .description("Background Job Queue CLI")
   .version("1.0.0");
-
 // commands registration
 registerEnqueue(program);
 registerStatus(program);
@@ -21,7 +20,5 @@ registerList(program);
 registerWorker(program);
 registerConfig(program);
 registerDLQ(program);
-
-
 // parse the commands 
 program.parse();
