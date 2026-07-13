@@ -1,38 +1,43 @@
 // start workers
-const workers = [];
 import { fork } from "child_process";
 import { deleteWorker, getExpiredWorkers } from "../db/workers.db.js";
 import { recoverWorkerJobs } from "../db/jobs.db.js";
 import { getConfigByKey } from "./config.service.js";
-//start worker
+const workers = [];
+let exitedWorkers = 0;
+let shuttingDown = false;
 export function startWorkers(count) {
     for (let i = 0; i < count; i++) {
+        //start worker
         const child = fork("./src/worker/worker.js");
         workers.push(child);
         child.on("exit", code => {
             console.log(`Worker exited ${child.pid} code ${code}`);
+            exitedWorkers++;
+            if (shuttingDown && exitedWorkers === workers.length) {
+                console.log("All workers exited.");
+                process.exit(0);
+            }
         });
     }
     // parent checking for killed workers and recovery of jobs 
     const RECOVERY_INTERVAL = getConfigByKey("recovery-interval");
-    setInterval(() => {recoverExpiredJobs();}, RECOVERY_INTERVAL);
-    process.on("SIGINT", () => {
-        console.log("gracefully shutting down");
+    const recoveryTimer = setInterval(() => { recoverExpiredJobs(); }, RECOVERY_INTERVAL);
+    function gracefulShutdown() {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        console.log("Gracefully shutting down...");
+        clearInterval(recoveryTimer);
         for (const worker of workers) {
-            worker.kill("SIGINT");
+            worker.send({ type: "shutdown" });
         }
-        process.exit(0);
-    });
-    process.on("SIGTERM", () => {
-        for (const worker of workers) {
-            worker.kill("SIGTERM");
-        }
-        process.exit(0);
-    });
+    }
+    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", gracefulShutdown);
 }
 //  recover jobs from killed worker
-const WORKER_TIMEOUT=getConfigByKey("worker-timeout");
 export function recoverExpiredJobs() {
+    const WORKER_TIMEOUT = getConfigByKey("worker-timeout");
     try {
         const cutoff = new Date(Date.now() - WORKER_TIMEOUT).toISOString();
         const workers = getExpiredWorkers(cutoff);

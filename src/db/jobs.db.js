@@ -107,8 +107,7 @@ export function claimNextPendingJob(workerId) {
         const now = new Date().toISOString();
         return claimJobStmt.get(workerId, now, now, now) ?? null;
     } catch (err) {
-        console.log(err)
-        console.log(err.code)
+        console.error(err)
         if (err.code === "SQLITE_BUSY") return null;
         throw err;
     }
@@ -127,8 +126,7 @@ export function markCompleted(id) {
         markCompletedstmt.run(new Date().toISOString(), id);
     }
     catch (err) {
-        console.log(err)
-        console.log(err.code)
+        console.error(err)
         throw err;
     }
 }
@@ -145,12 +143,10 @@ const markFailedstmt = db.prepare(`
 `);
 export function markFailed(id, attempts, nextRetryTime) {
     try {
-        console.log({ id, nextRetryTime, attempts });
         markFailedstmt.run(attempts, new Date().toISOString(), nextRetryTime, id);
     }
     catch (err) {
-        console.log(err)
-        console.log(err.code)
+        console.error(err)
         throw err;
     }
 }
@@ -169,8 +165,7 @@ export function markDead(id, attempts) {
         markDeadStmt.run(attempts, new Date().toISOString(), id);
     }
     catch (err) {
-        console.log(err)
-        console.log(err.code)
+        console.error(err);
         throw err;
     }
 }
@@ -207,6 +202,7 @@ export function getDeadJobs(){
         return getDeadJobsSmtm.all();
     }
     catch(err){
+        console.error(err);
         throw err;
     }
 }
@@ -226,7 +222,7 @@ export const retryDeadJob = (id)=>{
             retryDeadJobStmt.run(new Date().toISOString() , id);
         }
         catch(err){
-            console.log(err.message);
+            console.error(err);
         }
 }
 

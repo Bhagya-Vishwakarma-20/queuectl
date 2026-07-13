@@ -15,7 +15,7 @@ export function registerWorker(program) {
                 startWorkers(Number(options.count));
             }
             catch(err){
-                console.log(err.message);
+                console.error(err.message);
             }
         });
     worker

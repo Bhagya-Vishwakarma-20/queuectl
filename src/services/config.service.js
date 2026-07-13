@@ -14,7 +14,7 @@ export function getConfig (){
         return default_config;
     }
     catch(err){
-        console.log(err.message);
+        console.error(err.message);
     }
 }
 export const getConfigByKey = (key)=>{
@@ -24,14 +24,17 @@ export const getConfigByKey = (key)=>{
         return value;
     }
     catch(err){
-        console.log(err.message);
+        console.error(err.message);
     }
 }
 export function setConfigDB(key , value){
     try{
+        if(!default_config[key]){
+            throw new Error("Invalid key" + "\n valid keys are: " + Object.keys(default_config).join(", "));   
+        }
         setConfigInDB(key , value);
     }
     catch(err){
-        console.log(err.message);
+        console.error(err.message);
     }
 }

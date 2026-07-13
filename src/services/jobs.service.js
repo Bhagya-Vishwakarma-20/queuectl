@@ -29,13 +29,17 @@ export function handleFailure(job){
     try {
         const config = getConfig();
         const attempts =  Number(job.attempts)+1; // this time 
-        const max_retries = config["max-retries"];
+        // const max_retries = config["max-retries"]; // if we take from job then new config will not be impact old jobs 
+        const max_retries = Number(job["max-retries"]); // new config will not be impact old jobs 
+        console.log(job)
+        console.log({max_retries})
         if(attempts > max_retries){
             // move to dlq;
             markDead(job.id , attempts);
         }
         else {
             const nextRetryTime = new Date( (Math.pow(config["backoff-base"],attempts))*1000 + Date.now() ).toISOString();
+            console.log(config["backoff-base"]);
             markFailed(job.id, attempts, nextRetryTime);
         }
     }
