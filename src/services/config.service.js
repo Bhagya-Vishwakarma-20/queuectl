@@ -33,6 +33,7 @@ export function setConfigDB(key , value){
             throw new Error("Invalid key" + "\n valid keys are: " + Object.keys(default_config).join(", "));   
         }
         setConfigInDB(key , value);
+        console.log("Configuration set successfully");
     }
     catch(err){
         console.error(err.message);

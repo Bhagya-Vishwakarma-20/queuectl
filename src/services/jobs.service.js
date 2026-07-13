@@ -30,7 +30,7 @@ export function handleFailure(job){
         const config = getConfig();
         const attempts =  Number(job.attempts)+1; // this time 
         // const max_retries = config["max-retries"]; // if we take from job then new config will not be impact old jobs 
-        const max_retries = Number(job["max-retries"]); // new config will not be impact old jobs 
+        const max_retries = Number(job["max_retries"]); // new config will not be impact old jobs 
         console.log(job)
         console.log({max_retries})
         if(attempts > max_retries){

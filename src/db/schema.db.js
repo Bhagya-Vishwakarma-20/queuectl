@@ -41,5 +41,11 @@ export function initializeSchema(db) {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS supervisors (
+            pid INTEGER PRIMARY KEY,
+            worker_count INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            shutdown_requested INTEGER NOT NULL DEFAULT 0
+        );
     `);
 }

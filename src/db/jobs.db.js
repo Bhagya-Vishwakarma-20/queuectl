@@ -215,11 +215,11 @@ const retryDeadJobStmt = db.prepare(`
         worker_id=NULL,
         next_retry_at=NULL,
         updated_at=?
-        WHERE id=?
+        WHERE (id=? AND state='dead')
     `)
 export const retryDeadJob = (id)=>{
         try{
-            retryDeadJobStmt.run(new Date().toISOString() , id);
+            return retryDeadJobStmt.run(new Date().toISOString() , id);
         }
         catch(err){
             console.error(err);

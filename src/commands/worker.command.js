@@ -1,4 +1,4 @@
-import { startWorkers } from "../services/worker.service.js";
+import { startWorkers, stopWorkers } from "../services/worker.service.js";
 export function registerWorker(program) {
     const worker = program
         .command("worker")
@@ -21,6 +21,7 @@ export function registerWorker(program) {
     worker
         .command("stop")
         .action(() => {
-            console.log("Stopping workers...");
+            stopWorkers();
+            console.log("Shutdown requested.");
         });
 }

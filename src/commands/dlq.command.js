@@ -2,8 +2,8 @@ import { getDLQJobs, retryDLQJob } from "../services/dlq.service.js";
 
 export function registerDLQ(program) {
     const dlq = program
-                    .command("dlq")
-                    .description("dlq operations");
+        .command("dlq")
+        .description("dlq operations");
 
     dlq.command("list")
         .action(() => {
@@ -14,6 +14,7 @@ export function registerDLQ(program) {
     dlq.command("retry")
         .argument("<id>")
         .action((id) => {
-            retryDLQJob(id);
+            const data = retryDLQJob(id);
+            data?console.log(data):null;
         });
 }
