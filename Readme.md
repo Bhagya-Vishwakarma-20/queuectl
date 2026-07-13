@@ -3,6 +3,15 @@
 > A CLI-based background job queue built with **Node.js**, **better-sqlite3**, and **Commander.js**. QueueCTL supports concurrent worker processes, automatic retries with exponential backoff, crash recovery, a Dead Letter Queue (DLQ), and persistent storage.
 ---
 
+# Demo
+
+Demo video:
+
+
+[Demo Video](https://drive.google.com/file/d/1PTwfydL6YGTubXUZsmuayplkxbjYLzjb/view?usp=sharing)
+
+
+
 # Features
 
 * Persistent job storage using SQLite
@@ -519,13 +528,6 @@ Some features intentionally left out to keep the implementation focused:
 
 ---
 
-# Demo
-
-Demo video:
-
-```
-<demo recording link here>
-```
 
 ---
 
