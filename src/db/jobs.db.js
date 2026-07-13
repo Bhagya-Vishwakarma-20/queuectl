@@ -177,13 +177,14 @@ const recoverWorkerJobsStmt = db.prepare(`
     worker_id=NULL,
     updated_at=?
     WHERE
-    worker_id=?
+    (worker_id = ? OR worker_id = (SELECT id FROM workers WHERE pid = ?))
     AND state='processing'
     `)
 export function recoverWorkerJobs(workerId){
     try {
         return recoverWorkerJobsStmt.run(
             new Date().toISOString(),
+            workerId,
             workerId
         );
     } catch(err){

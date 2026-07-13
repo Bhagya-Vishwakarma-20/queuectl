@@ -8,7 +8,7 @@ import { requestShutdownForAllSupervisors } from "../db/supervisor.db.js";
 const workers = [];
 let exitedWorkers = 0;
 let shuttingDown = false;
-export function startWorkers(count) {
+export  function startWorkers(count) {
     if (count < 1) throw Error("Count must be greater than 0");
     registerSupervisor(count);
     for (let i = 0; i < count; i++) {
@@ -16,9 +16,16 @@ export function startWorkers(count) {
         const child = fork("./src/worker/worker.js");
         workers.push(child);
         // listing each worker for exit
-        child.on("exit", code => {
+        child.on("exit", async code => {
             console.log(`Worker exited ${child.pid} code ${code}`);
             exitedWorkers++;
+            if(code!=0){
+                const result = recoverWorkerJobs(child.pid);
+                deleteWorker(child.pid);
+                if (result?.changes > 0) {
+                    console.log(`Recovered ${result.changes} job(s) from crashed worker ${child.pid}`);
+                }
+            }
             if (shuttingDown && exitedWorkers === workers.length) {
                 /// actual exit of the program
                 removeSupervisor();
