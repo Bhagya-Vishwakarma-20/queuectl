@@ -7,7 +7,8 @@
     "queuectl": "./src/index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node .queuectl-tests/custom/readable_tests.js",
+    "start": "cd dashboard && npm start"
   },
   "keywords": [],
   "author": "",

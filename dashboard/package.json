@@ -1,0 +1,15 @@
+{
+  "name": "queuectl-dashboard",
+  "version": "1.0.0",
+  "description": "Web dashboard for QueueCTL job queue",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
+}
