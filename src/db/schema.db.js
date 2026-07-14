@@ -32,6 +32,8 @@ export function initializeSchema(db) {
             worker_id TEXT,
             next_retry_at DATETIME,
 
+            priority INTEGER NOT NULL DEFAULT 0,
+
             FOREIGN KEY (worker_id)
                 REFERENCES workers(id)
                 ON DELETE SET NULL
@@ -41,6 +43,12 @@ export function initializeSchema(db) {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        INSERT OR IGNORE INTO config (key, value) VALUES ('max-retries', '3');
+        INSERT OR IGNORE INTO config (key, value) VALUES ('backoff-base', '2');
+        INSERT OR IGNORE INTO config (key, value) VALUES ('recovery-interval', '15000');
+        INSERT OR IGNORE INTO config (key, value) VALUES ('worker-timeout', '30000');
+
         CREATE TABLE IF NOT EXISTS supervisors (
             pid INTEGER PRIMARY KEY,
             worker_count INTEGER NOT NULL,

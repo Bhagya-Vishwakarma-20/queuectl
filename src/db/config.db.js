@@ -10,10 +10,13 @@ export const getConfigFromDbByKey = (key)=>{
     return getConfigByKeySmtm.get(key);
 }
 //set config
-const setConfigSmtm = db.prepare(`update config set value=? where key=?`);
+const setConfigSmtm = db.prepare(`
+    INSERT INTO config (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value
+`);
 export const  setConfigInDB = (key , value)=>{
     try{
-        setConfigSmtm.run(value,key);
+        setConfigSmtm.run(key, value);
     }
     catch(err){
         throw err;

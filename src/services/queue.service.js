@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { createJob , getJobsCountGroupedByState } from "../db/jobs.db.js";
 import { getConfig } from "./config.service.js";
 // enqueue job
-export function enqueueJob(jobPayload){
+export function enqueueJob(jobPayload,priority){
     const input = JSON.parse(jobPayload);
     if (!input.command)throw new Error("Command is required.");
     const now = new Date().toISOString();
@@ -18,6 +18,7 @@ export function enqueueJob(jobPayload){
         next_retry_at: null,
         created_at: now,
         updated_at: now,
+        priority:priority
     };
     createJob(job);
     return {

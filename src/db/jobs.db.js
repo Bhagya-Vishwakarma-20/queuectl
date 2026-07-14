@@ -9,7 +9,8 @@ INSERT INTO jobs(
     attempts,
     max_retries,
     created_at,
-    updated_at
+    updated_at,
+    priority
 )
 VALUES(
     @id,
@@ -18,7 +19,8 @@ VALUES(
     @attempts,
     @max_retries,
     @created_at,
-    @updated_at
+    @updated_at,
+    @priority
 )
 `);
 // create job
@@ -94,7 +96,7 @@ const claimJobStmt = db.prepare(`
         SELECT id
         FROM jobs
         WHERE (state = 'pending') OR (state='failed' AND next_retry_at <= ?)
-        ORDER BY created_at
+        ORDER BY priority DESC, created_at ASC
         LIMIT 1
     )
     AND (
