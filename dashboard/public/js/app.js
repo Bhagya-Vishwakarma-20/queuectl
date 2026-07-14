@@ -77,6 +77,22 @@ function truncate(str, len = 30) {
     return str.length > len ? str.slice(0, len) + "…" : str;
 }
 
+function formatIndianTime(dateStr) {
+    if (!dateStr) return "—";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "—";
+    return date.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "numeric",
+        minute: "numeric",
+        second: "numeric",
+        hour12: true,
+        day: "numeric",
+        month: "numeric",
+        year: "numeric"
+    });
+}
+
 // ── Toast Notifications ──────────────────────────────────────────────
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -247,8 +263,11 @@ async function renderOverview(container) {
             API.jobs(),
         ]);
 
-        // Sort: Active jobs (processing/pending) first by execution priority (priority DESC, created_at ASC)
-        // Then completed/failed/dead by updated_at DESC
+        // Sort: Active jobs (processing/pending) first.
+        // - Ready jobs (state='processing' or pending ready) come before future scheduled jobs.
+        // - Ready jobs are sorted by priority DESC, created_at ASC (matching SQL claim logic).
+        // - Future jobs are sorted by run_at ASC, priority DESC.
+        // Completed/failed/dead are sorted by updated_at DESC.
         const sortedJobs = [...jobs].sort((a, b) => {
             const isAActive = a.state === "processing" || a.state === "pending";
             const isBActive = b.state === "processing" || b.state === "pending";
@@ -257,10 +276,30 @@ async function renderOverview(container) {
             if (isAActive && isBActive) {
                 if (a.state === "processing" && b.state !== "processing") return -1;
                 if (a.state !== "processing" && b.state === "processing") return 1;
-                if (b.priority !== a.priority) {
-                    return b.priority - a.priority;
+
+                const now = Date.now();
+                const isAFuture = a.state === "pending" && a.run_at && new Date(a.run_at).getTime() > now;
+                const isBFuture = b.state === "pending" && b.run_at && new Date(b.run_at).getTime() > now;
+
+                // 1. Ready jobs come before future scheduled jobs
+                if (!isAFuture && isBFuture) return -1;
+                if (isAFuture && !isBFuture) return 1;
+
+                // 2. If both are ready, sort by priority DESC, then created_at ASC
+                if (!isAFuture && !isBFuture) {
+                    if (b.priority !== a.priority) {
+                        return b.priority - a.priority;
+                    }
+                    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
                 }
-                return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+
+                // 3. If both are future, sort by run_at ASC, then priority DESC
+                const timeA = new Date(a.run_at).getTime();
+                const timeB = new Date(b.run_at).getTime();
+                if (timeA !== timeB) {
+                    return timeA - timeB;
+                }
+                return b.priority - a.priority;
             }
             return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
@@ -297,6 +336,7 @@ async function renderOverview(container) {
                                         <th>Command</th>
                                         <th>Priority</th>
                                         <th>Status</th>
+                                        <th>Scheduled Run</th>
                                         <th>Updated</th>
                                     </tr>
                                 </thead>
@@ -316,6 +356,7 @@ async function renderOverview(container) {
                                                 <td class="cell-command">${escapeHtml(truncate(j.command, 30))}</td>
                                                 <td>${renderPriorityBadge(j.priority)}</td>
                                                 <td><span class="status-badge ${j.state}">${j.state}</span></td>
+                                                <td class="cell-time">${formatIndianTime(j.run_at)}</td>
                                                 <td class="cell-time">${relativeTime(j.updated_at)}</td>
                                             </tr>
                                         `;
@@ -453,6 +494,7 @@ async function renderJobs(container) {
                                     <th>Status</th>
                                     <th>Attempts</th>
                                     <th>Worker</th>
+                                    <th>Scheduled Run</th>
                                     <th>Created</th>
                                     <th>Updated</th>
                                 </tr>
@@ -466,6 +508,7 @@ async function renderJobs(container) {
                                         <td><span class="status-badge ${j.state}">${j.state}</span></td>
                                         <td style="color:var(--text-secondary)">${j.attempts}/${j.max_retries}</td>
                                         <td class="cell-id" title="${escapeHtml(j.worker_id || '')}">${j.worker_id ? escapeHtml(truncate(j.worker_id, 12)) : "—"}</td>
+                                        <td class="cell-time">${formatIndianTime(j.run_at)}</td>
                                         <td class="cell-time">${relativeTime(j.created_at)}</td>
                                         <td class="cell-time">${relativeTime(j.updated_at)}</td>
                                     </tr>
@@ -498,9 +541,10 @@ window.showJobDetail = async function (id) {
             ["State", `<span class="status-badge ${job.state}">${job.state}</span>`],
             ["Attempts", `${job.attempts} / ${job.max_retries}`],
             ["Worker ID", job.worker_id || "—"],
-            ["Next Retry", job.next_retry_at || "—"],
-            ["Created At", job.created_at],
-            ["Updated At", job.updated_at],
+            ["Scheduled Run (IST)", formatIndianTime(job.run_at)],
+            ["Next Retry (IST)", job.next_retry_at ? formatIndianTime(job.next_retry_at) : "—"],
+            ["Created At (IST)", formatIndianTime(job.created_at)],
+            ["Updated At (IST)", formatIndianTime(job.updated_at)],
         ];
 
         openModal(

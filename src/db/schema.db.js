@@ -33,6 +33,7 @@ export function initializeSchema(db) {
             next_retry_at DATETIME,
 
             priority INTEGER NOT NULL DEFAULT 0,
+            run_at DATETIME,
 
             FOREIGN KEY (worker_id)
                 REFERENCES workers(id)

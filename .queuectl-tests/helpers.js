@@ -79,11 +79,14 @@ export function queuectl(...args) {
 }
 
 // ─── Convenience Wrappers ────────────────────────────────────────────────────
-export async function enqueue(jobObj, priority = null) {
+export async function enqueue(jobObj, priority = null, runAt = null) {
     const payload = typeof jobObj === 'string' ? jobObj : JSON.stringify(jobObj);
     const args = ['enqueue', payload];
     if (priority !== null) {
         args.push('-p', String(priority));
+    }
+    if (runAt !== null) {
+        args.push('-r', String(runAt));
     }
     return queuectl(...args);
 }

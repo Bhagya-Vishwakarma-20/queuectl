@@ -42,7 +42,7 @@ const stmts = {
   allWorkers: db.prepare(`SELECT * FROM workers ORDER BY started_at DESC`),
   allSupervisors: db.prepare(`SELECT * FROM supervisors`),
   createJob: db.prepare(
-    `INSERT INTO jobs (id, command, state, attempts, max_retries, priority, created_at, updated_at) VALUES (@id, @command, @state, @attempts, @max_retries, @priority, @created_at, @updated_at)`
+    `INSERT INTO jobs (id, command, state, attempts, max_retries, priority, created_at, updated_at, run_at) VALUES (@id, @command, @state, @attempts, @max_retries, @priority, @created_at, @updated_at, @run_at)`
   ),
   getJobById: db.prepare(`SELECT * FROM jobs WHERE id = ?`),
   getMaxRetries: db.prepare(`SELECT value FROM config WHERE key = 'max-retries'`),
@@ -135,6 +135,7 @@ app.post("/api/enqueue", (req, res) => {
       priority: typeof priority === "number" ? priority : Number(priority || 0),
       created_at: now,
       updated_at: now,
+      run_at: req.body.run_at || req.body.runAt || null
     };
     stmts.createJob.run(job);
     res.status(201).json({ success: true, job });

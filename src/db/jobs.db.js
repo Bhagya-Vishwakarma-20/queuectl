@@ -10,7 +10,8 @@ INSERT INTO jobs(
     max_retries,
     created_at,
     updated_at,
-    priority
+    priority,
+    run_at
 )
 VALUES(
     @id,
@@ -20,7 +21,8 @@ VALUES(
     @max_retries,
     @created_at,
     @updated_at,
-    @priority
+    @priority,
+    @run_at
 )
 `);
 // create job
@@ -90,24 +92,26 @@ const claimJobStmt = db.prepare(`
     UPDATE jobs
     SET
         state = 'processing',
-        worker_id = ?,
-        updated_at = ?
+        worker_id = @workerId,
+        updated_at = @now
     WHERE id = (
         SELECT id
         FROM jobs
-        WHERE (state = 'pending') OR (state='failed' AND next_retry_at <= ?)
+        WHERE (state = 'pending' AND (run_at IS NULL OR run_at <= @now))
+           OR (state = 'failed' AND next_retry_at <= @now)
         ORDER BY priority DESC, created_at ASC
         LIMIT 1
     )
     AND (
-        state = 'pending' OR (state = 'failed' AND next_retry_at <= ?)
+        (state = 'pending' AND (run_at IS NULL OR run_at <= @now))
+        OR (state = 'failed' AND next_retry_at <= @now)
     )
     RETURNING *;
 `);
 export function claimNextPendingJob(workerId) {
     try {
         const now = new Date().toISOString();
-        return claimJobStmt.get(workerId, now, now, now) ?? null;
+        return claimJobStmt.get({ workerId, now }) ?? null;
     } catch (err) {
         console.error(err)
         if (err.code === "SQLITE_BUSY") return null;

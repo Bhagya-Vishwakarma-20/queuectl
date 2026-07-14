@@ -4,11 +4,11 @@ export function registerEnqueue(program) {
         .command("enqueue")
         .description("Add a new job")
         .argument("<job>", "Job JSON")
+        .option("-r, --run-at <runAt>", "Scheduled run time/delay (e.g., '10', '2pm', '2-4-2026 2pm')",null)
         .option("-p, --priority <priority>", "Job priority","0")
         .action((job,options) => {
             try{
-                const priority = Number(options.priority);
-                const data = enqueueJob(job,priority);
+                const data = enqueueJob(job,options.priority,options.runAt);
                 console.log(data);
             } catch (err) {
                 console.error(err.message);

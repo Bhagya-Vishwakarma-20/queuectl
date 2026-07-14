@@ -225,6 +225,59 @@ async function runTests() {
         try { fs.unlinkSync(logPath); } catch {}
     });
 
+    await test("Scheduled Jobs (run_at)", async () => {
+        // Test parsing 1: Relative delay (e.g., 2 seconds)
+        const relativeStart = new Date();
+        await enqueue({ id: 'job-delay', command: 'node -e "console.log(1)"' }, null, '2');
+        const pendingJobs = await getJobs('pending');
+        const delayJob = pendingJobs.find(j => j.id === 'job-delay');
+        if (!delayJob) throw new Error("Delayed job was not persisted");
+        if (!delayJob.run_at) throw new Error("Delayed job does not have run_at set");
+        const delayDate = new Date(delayJob.run_at);
+        const diffSec = (delayDate - relativeStart) / 1000;
+        if (diffSec < 1 || diffSec > 4) {
+            throw new Error(`Delayed job run_at is incorrect. Expected ~2s diff, got ${diffSec}s`);
+        }
+
+        // Test parsing 2: Today time (e.g. 11:30pm)
+        await enqueue({ id: 'job-today-pm', command: 'node -e "console.log(1)"' }, null, '11:30pm');
+        const jobs = await getJobs();
+        const todayPmJob = jobs.find(j => j.id === 'job-today-pm');
+        if (!todayPmJob || !todayPmJob.run_at) throw new Error("Today time job not persisted or lacks run_at");
+        const todayPmDate = new Date(todayPmJob.run_at);
+        const expectedTodayPm = new Date();
+        expectedTodayPm.setHours(23, 30, 0, 0);
+        if (todayPmDate.getTime() !== expectedTodayPm.getTime()) {
+            throw new Error(`Expected today PM time to be ${expectedTodayPm.toISOString()}, got ${todayPmDate.toISOString()}`);
+        }
+
+        // Test parsing 3: Specific date-time (e.g. "2-4-2026 2pm")
+        await enqueue({ id: 'job-datetime', command: 'node -e "console.log(1)"' }, null, '2-4-2026 2pm');
+        const datetimeJob = (await getJobs()).find(j => j.id === 'job-datetime');
+        if (!datetimeJob || !datetimeJob.run_at) throw new Error("Specific date-time job not persisted or lacks run_at");
+        const datetimeDate = new Date(datetimeJob.run_at);
+        const expectedDatetime = new Date();
+        expectedDatetime.setFullYear(2026, 3, 2); // 2nd April 2026
+        expectedDatetime.setHours(14, 0, 0, 0);
+        if (datetimeDate.getTime() !== expectedDatetime.getTime()) {
+            throw new Error(`Expected date-time to be ${expectedDatetime.toISOString()}, got ${datetimeDate.toISOString()}`);
+        }
+
+        // Test execution: Verify delayed job is not executed immediately, but runs after the delay
+        const worker = startWorkersBackground(1);
+
+        // Job was scheduled with 2s delay. Wait 0.5s and check it's still pending
+        await sleep(500);
+        const stillPending = (await getJobs('pending')).some(j => j.id === 'job-delay');
+        if (!stillPending) throw new Error("Delayed job was executed too early!");
+
+        // Wait another 2s (total 2.5s since enqueue) and check if it completed
+        const completed = await waitForJobState('job-delay', 'completed', 5000);
+        if (!completed) throw new Error("Delayed job was not completed after its scheduled time");
+
+        await stopWorkersAndWait(worker);
+    });
+
     console.log(`\nTests completed. ${passed} passed, ${failed} failed.`);
     process.exit(failed > 0 ? 1 : 0);
 }
