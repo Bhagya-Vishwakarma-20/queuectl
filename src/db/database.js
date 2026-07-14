@@ -3,6 +3,9 @@ import { initializeSchema } from "./schema.db.js";
 import path from "path";
 import fs from "fs";
 const dataDir = path.join(import.meta.dirname, "..", "..", "data");
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
 const db = new Database(path.join(dataDir, "queue.db"));
 db.pragma("foreign_keys = ON");
 db.pragma("journal_mode = WAL"); //This enables Write-Ahead Logging.
