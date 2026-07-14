@@ -243,50 +243,121 @@ This keeps database polling to one query per supervisor instead of one query per
 
 ---
 
-# 5. If priorities were added tomorrow, what survives and what changes?
+# 5. Priority Jobs — Implementation and Design
 
-Most of the architecture remains unchanged.
+Priority jobs have been implemented as a **bonus feature**.
 
-## Unchanged
+## Schema Change
 
-- CLI
-- Service layer
-- Worker runtime
-- Crash recovery
-- Dead Letter Queue
-- Retry logic
-- Supervisor architecture
-- Database structure
-
-Only the job selection query changes.
-
-Current query:
+A `priority` column was added to the `jobs` table:
 
 ```sql
-ORDER BY created_at
+priority INTEGER NOT NULL DEFAULT 0
 ```
 
-would become:
+Higher values mean higher priority. The default is `0`, so existing jobs and jobs enqueued without specifying a priority continue to work as before.
+
+## CLI
+
+The `enqueue` command accepts an optional `--priority` (or `-p`) flag:
+
+```bash
+queuectl enqueue '{"id":"urgent","command":"echo urgent"}' --priority 10
+```
+
+## Job Claiming
+
+The atomic claim query now orders by priority first:
 
 ```sql
 ORDER BY priority DESC, created_at ASC
 ```
 
-Higher priority jobs would therefore be claimed first while preserving FIFO ordering among jobs with equal priority.
+Higher priority jobs are always claimed before lower priority jobs. Among jobs with equal priority, FIFO ordering is preserved.
 
-No changes would be required in:
+## What survived unchanged?
 
-- worker execution
-- graceful shutdown
-- heartbeat
-- recovery
-- retry logic
-- DLQ
-- configuration system
+As predicted in the original design, almost nothing else changed:
 
-This demonstrates why the project separates job selection from job execution.
+- Worker execution — unchanged
+- Graceful shutdown — unchanged
+- Heartbeat — unchanged
+- Crash recovery — unchanged
+- Retry logic — unchanged
+- Dead Letter Queue — unchanged
+- Supervisor architecture — unchanged
+- Configuration system — unchanged
 
-Adding priorities only changes the scheduling policy rather than the rest of the system.
+Only three files were modified:
+
+1. `schema.db.js` — added the `priority` column
+2. `jobs.db.js` — added `priority` to the INSERT statement and updated the ORDER BY in the claim query
+3. `enqueue.command.js` — added the `--priority` CLI option
+
+This confirms that separating job selection from job execution keeps the scheduling policy isolated from the rest of the system.
+
+---
+
+# 6. Dashboard — Design Decision
+
+A web-based monitoring dashboard was implemented as a **bonus feature**.
+
+## Architecture
+
+The dashboard is a standalone Express.js server that reads the same SQLite database used by the CLI and workers.
+
+```
+┌──────────────┐     ┌──────────────┐
+│  queuectl    │     │  Dashboard   │
+│  CLI/Workers │     │  (Express)   │
+└──────┬───────┘     └──────┬───────┘
+       │                    │
+       │   SQLite (WAL)     │
+       └────────┬───────────┘
+                │
+          data/queue.db
+```
+
+Because SQLite runs in WAL mode, the dashboard can read the database concurrently while workers write to it, without blocking either side.
+
+## Why a separate server instead of embedding in the CLI?
+
+The dashboard serves static HTML/CSS/JS and exposes a REST API. Embedding a web server inside the CLI or supervisor process would:
+
+- Couple the dashboard lifecycle to the worker lifecycle
+- Add dependencies (Express, CORS) to the core package
+- Complicate the supervisor's single responsibility
+
+Keeping the dashboard as a separate process follows the same separation-of-concerns principle used throughout the project.
+
+## Features
+
+The dashboard provides:
+
+- **Overview** — real-time job counts by state and worker/supervisor counts
+- **Jobs** — filterable job list with detail modals
+- **Dead Letter Queue** — view and retry dead jobs
+- **Workers** — live worker and supervisor status
+- **Configuration** — view and update runtime config
+- **Enqueue** — submit new jobs (with priority) directly from the UI
+- **Auto-refresh** — dashboard polls the API to stay current
+
+## REST API
+
+The dashboard exposes the following endpoints:
+
+| Method | Endpoint              | Description                |
+| ------ | --------------------- | -------------------------- |
+| GET    | `/api/status`         | Job counts and worker info |
+| GET    | `/api/jobs`           | List all jobs              |
+| GET    | `/api/jobs?state=...` | Filter jobs by state       |
+| GET    | `/api/jobs/:id`       | Single job detail          |
+| POST   | `/api/enqueue`        | Enqueue a new job          |
+| GET    | `/api/config`         | Get configuration          |
+| PUT    | `/api/config/:key`    | Update a config value      |
+| GET    | `/api/dlq`            | List dead jobs             |
+| POST   | `/api/dlq/:id/retry`  | Retry a dead job           |
+| GET    | `/api/workers`        | List workers/supervisors   |
 
 ---
 
@@ -301,3 +372,5 @@ Adding priorities only changes the scheduling policy rather than the rest of the
 - DLQ retry resets attempts.
 - Business logic isolated inside the service layer.
 - SQL kept inside the database layer.
+- **Priority jobs** implemented via a `priority` column and `ORDER BY priority DESC, created_at ASC` in the claim query.
+- **Web dashboard** implemented as a standalone Express server sharing the same SQLite database via WAL mode.

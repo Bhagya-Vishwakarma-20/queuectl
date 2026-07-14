@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node .queuectl-tests/custom/readable_tests.js",
-    "start": "cd dashboard && npm start"
+    "start": "cd dashboard && npm start",
+    "postinstall": "cd dashboard && npm install"
   },
   "keywords": [],
   "author": "",

@@ -1,6 +1,6 @@
 # QueueCTL
 
-> A CLI-based background job queue built with **Node.js**, **better-sqlite3**, and **Commander.js**. QueueCTL supports concurrent worker processes, automatic retries with exponential backoff, crash recovery, a Dead Letter Queue (DLQ), and persistent storage.
+> A CLI-based background job queue built with **Node.js**, **better-sqlite3**, and **Commander.js**. QueueCTL supports concurrent worker processes, automatic retries with exponential backoff, crash recovery, a Dead Letter Queue (DLQ), priority-based scheduling, a web dashboard, and persistent storage.
 ---
 
 # Demo
@@ -24,6 +24,8 @@ Demo video:
 * Graceful shutdown
 * Runtime configuration through CLI
 * Job listing and status commands
+* **Priority-based job scheduling** (bonus)
+* **Web dashboard** for real-time monitoring and job management (bonus)
 
 ---
 
@@ -33,25 +35,26 @@ Demo video:
 * **better-sqlite3**
 * **Commander.js**
 * **SQLite (WAL Mode)**
+* **Express.js** (dashboard)
 
 ---
 
 # Architecture
 
 ```
-                   +----------------------+
-                   |      queuectl CLI    |
-                   +----------+-----------+
+                   +----------------------+        +-------------------+
+                   |      queuectl CLI    |        |    Dashboard      |
+                   +----------+-----------+        |  (Express :3737)  |
+                              |                    +--------+----------+
+                           Commands                         |
+                              |                             |
+                              v                             |
+                         Service Layer                      |
+                              |                             |
+                              v                             v
+                        Database Layer  <────────── REST API reads
                               |
-                           Commands
-                              |
-                              v
-                         Service Layer
-                              |
-                              v
-                        Database Layer
-                              |
-                        better-sqlite3 (SQLite)
+                        better-sqlite3 (SQLite WAL)
                               |
             +-----------+-----------+-----------+
             |           |           |           |
@@ -99,6 +102,8 @@ Supervisor
     ├── Worker 4
     └── Worker 5
 ```
+
+The dashboard runs as a separate process (port 3737) and reads the shared SQLite database via WAL mode.
 
 Each supervisor is responsible for:
 
@@ -151,40 +156,28 @@ Each supervisor is responsible for:
                  +------+
 ```
 
+Priority-aware scheduling ensures higher-priority jobs are always picked first (see Priority Jobs below).
+
 ---
 
-# Atomic Job Claiming
+# Priority Jobs
 
-QueueCTL guarantees that a job can only be claimed by **one worker**, even when multiple worker processes are running simultaneously.
+Jobs can be enqueued with an optional priority (default `0`). Higher values mean higher priority.
 
-Instead of performing:
-
-```
-SELECT
-
-↓
-
-UPDATE
+```bash
+queuectl enqueue '{"id":"urgent","command":"echo URGENT"}' --priority 10
+queuectl enqueue '{"id":"normal","command":"echo normal"}'              # priority 0
 ```
 
-the system claims jobs using **one atomic SQL statement**:
+The atomic claim query orders by:
 
 ```sql
-UPDATE jobs
-SET
-    state='processing',
-    worker_id=?,
-    updated_at=?
-WHERE id=(
-    SELECT id
-    FROM jobs
-    WHERE ...
-    LIMIT 1
-)
-RETURNING *;
+ORDER BY priority DESC, created_at ASC
 ```
 
-SQLite executes this as a single write statement, preventing duplicate job execution across separate OS processes.
+So a priority-10 job will always be picked before a priority-0 job, regardless of creation time. Among jobs with equal priority, FIFO ordering is preserved.
+
+The dashboard also supports setting priority when enqueuing jobs from the UI.
 
 ---
 
@@ -375,6 +368,12 @@ queuectl config set max-retries 5
 queuectl enqueue '{"id":"job1","command":"echo Hello"}'
 ```
 
+With priority:
+
+```bash
+queuectl enqueue '{"id":"job2","command":"echo Urgent"}' --priority 10
+```
+
 ---
 
 ## Start Workers
@@ -452,6 +451,16 @@ queuectl config set backoff-base 3
 
 ---
 
+## Dashboard
+
+```bash
+npm start
+```
+
+Opens the dashboard at [http://localhost:3737](http://localhost:3737).
+
+---
+
 ## Installation
 
 ```bash
@@ -460,6 +469,9 @@ cd queuectl
 npm install
 npm link
 ```
+
+`npm install` automatically installs both root and dashboard dependencies.
+
 # Running
 
 Start workers:
@@ -484,7 +496,13 @@ queuectl status
 
 # Testing
 
-The implementation has been manually tested for the following scenarios:
+To run the automated test suite, execute:
+
+```bash
+npm test
+```
+
+The implementation has also been manually tested for the following scenarios:
 
 *  Successful job execution
 *  Failed job retries
@@ -496,6 +514,9 @@ The implementation has been manually tested for the following scenarios:
 *  Graceful shutdown using `worker stop`
 *  Persistent storage across restarts
 *  Configuration updates
+*  Priority-based job ordering
+*  Dashboard API endpoints
+*  Enqueuing jobs from the dashboard UI
 
 ---
 
@@ -510,24 +531,19 @@ The implementation has been manually tested for the following scenarios:
 * Configuration stored persistently
 * Small, focused database functions
 * Business logic isolated from SQL
+* **Priority-based scheduling** via `ORDER BY priority DESC, created_at ASC`
+* **Web dashboard** (standalone Express server sharing the SQLite DB via WAL)
 
 ---
 
 # Future Improvements
 
-Some features intentionally left out to keep the implementation focused:
-
-* Job priorities
 * Scheduled jobs (`run_at`)
 * Job timeouts
 * Job output logging
-* Metrics
-* Web dashboard
-* REST API
+* Metrics / observability
 * Worker auto-scaling
 
 ---
 
-
----
 
