@@ -1,6 +1,6 @@
 # QueueCTL
 
-> A CLI-based background job queue built with **Node.js**, **better-sqlite3**, and **Commander.js**. QueueCTL supports concurrent worker processes, automatic retries with exponential backoff, crash recovery, a Dead Letter Queue (DLQ), priority-based scheduling, a web dashboard, and persistent storage.
+> A CLI-based background job queue built with **Node.js**, **better-sqlite3**, and **Commander.js**. QueueCTL supports concurrent worker processes, automatic retries with exponential backoff, crash recovery, a Dead Letter Queue (DLQ), priority-based scheduling, scheduled jobs, job output logging, a web dashboard, and persistent storage.
 ---
 
 # Demo
@@ -26,6 +26,8 @@ Demo video:
 * Job listing and status commands
 * **Priority-based job scheduling** (bonus)
 * **Web dashboard** for real-time monitoring and job management (bonus)
+* **Scheduled jobs** — defer execution to a future time (bonus)
+* **Job output logging** — stdout, stderr, and exit code captured per job (bonus)
 
 ---
 
@@ -52,14 +54,15 @@ Demo video:
                          Service Layer                      |
                               |                             |
                               v                             v
-                        Database Layer  <────────── REST API reads
-                              |
-                        better-sqlite3 (SQLite WAL)
-                              |
-            +-----------+-----------+-----------+
-            |           |           |           |
-            v           v           v           v
-            Jobs      Workers    Supervisors   Config   (TABLES)
+                         Database Layer  <────────── REST API reads
+                               |
+                         better-sqlite3 (SQLite WAL)
+                               |
+             +-----------+-----------+-----------+
+             |           |           |           |
+             v           v           v           v
+             Jobs      Workers    Supervisors   Config   (TABLES)
+          (stdout, stderr, exit_code, run_at)
 ```
 
 The project follows a layered architecture:
@@ -117,46 +120,53 @@ Each supervisor is responsible for:
 # Job Lifecycle
 
 ```
-            +-----------+
-            |  Pending  |
-            +-----------+
-                  |
-                  v
-            +-----------+
-            |Processing |
-            +-----------+
-             |        |
-             |        |
-             |        v
-             |   +-----------+
-             |   | Completed |
-             |   +-----------+
-             |
-             v
-      +-------------+
-      |   Failed    |
-      +-------------+
-             |
-             v
-      Wait (Backoff)
-             |
-             v
-      +-------------+
-      | Processing  |
-      +-------------+
-             |
-             v
-        Max Retries?
-         /        \
-       No          Yes
-       |            |
-       v            v
- Retry Again     +------+
-                 | Dead |
-                 +------+
+     +-----------+       +-----------+
+     |  Enqueued |       | Scheduled |
+     | (run_at   |       | (run_at   |
+     |  = NULL)  |       |  = future)|
+     +-----+-----+       +-----+-----+
+           |                    |
+           v                    | (waits until run_at <= now)
+     +-----------+              |
+     |  Pending  | <────────────+
+     +-----------+
+           |
+           v
+     +-----------+
+     |Processing |
+     +-----------+
+      |        |
+      |        |
+      |        v
+      |   +-----------+
+      |   | Completed |  (stdout, stderr, exit_code saved)
+      |   +-----------+
+      |
+      v
++-------------+
+|   Failed    |  (stdout, stderr, exit_code saved)
++-------------+
+      |
+      v
+Wait (Backoff)
+      |
+      v
++-------------+
+| Processing  |
++-------------+
+      |
+      v
+ Max Retries?
+  /        \
+No          Yes
+|            |
+v            v
+Retry Again  +------+
+             | Dead |
+             +------+
 ```
 
-Priority-aware scheduling ensures higher-priority jobs are always picked first (see Priority Jobs below).
+Priority-aware scheduling ensures higher-priority jobs are always picked first (see Priority Jobs below). Scheduled jobs remain in `pending` but are not claimed until `run_at <= now`.
 
 ---
 
@@ -178,6 +188,61 @@ ORDER BY priority DESC, created_at ASC
 So a priority-10 job will always be picked before a priority-0 job, regardless of creation time. Among jobs with equal priority, FIFO ordering is preserved.
 
 The dashboard also supports setting priority when enqueuing jobs from the UI.
+
+---
+
+# Scheduled Jobs
+
+Jobs can be scheduled for future execution using the `--run-at` (or `-r`) flag.
+
+```bash
+# Delay by N seconds from now
+queuectl enqueue '{"id":"delayed","command":"echo later"}' --run-at 60
+
+# Schedule for a specific time today
+queuectl enqueue '{"id":"afternoon","command":"echo hello"}' --run-at "2pm"
+queuectl enqueue '{"id":"precise","command":"echo hello"}' --run-at "2:30pm"
+
+# Schedule for a specific date and time
+queuectl enqueue '{"id":"future","command":"echo hello"}' --run-at "15-7-2026 2pm"
+```
+
+Supported formats:
+
+| Format                  | Example           | Meaning                          |
+| ----------------------- | ----------------- | -------------------------------- |
+| Seconds (integer)       | `60`              | Run 60 seconds from now          |
+| Time today (12h)        | `2pm`, `2:30pm`   | Run at that time today           |
+| Date + time             | `15-7-2026 2pm`   | Run at that date and time        |
+| ISO 8601 / standard     | `2026-07-15T14:00`| Parsed directly                  |
+
+Scheduled jobs are stored with `state = 'pending'` and a `run_at` timestamp. The claim query skips them until `run_at <= now`:
+
+```sql
+WHERE (state = 'pending' AND (run_at IS NULL OR run_at <= @now))
+```
+
+Jobs without `--run-at` have `run_at = NULL` and are eligible immediately.
+
+---
+
+# Job Output Logging
+
+Every job's execution output is captured and persisted in the database.
+
+After a job finishes (success or failure), the worker saves:
+
+| Column      | Description                                |
+| ----------- | ------------------------------------------ |
+| `stdout`    | Standard output from the command           |
+| `stderr`    | Standard error output from the command     |
+| `exit_code` | Process exit code (`0` = success)          |
+
+This data is stored directly in the `jobs` table and is available via:
+
+* `queuectl list --state completed --json` — includes stdout, stderr, exit_code per job
+* The dashboard job detail modal
+* The REST API (`GET /api/jobs/:id`)
 
 ---
 
@@ -374,6 +439,19 @@ With priority:
 queuectl enqueue '{"id":"job2","command":"echo Urgent"}' --priority 10
 ```
 
+With scheduled time:
+
+```bash
+queuectl enqueue '{"id":"job3","command":"echo Later"}' --run-at 60
+queuectl enqueue '{"id":"job4","command":"echo Afternoon"}' --run-at "2pm"
+```
+
+With both:
+
+```bash
+queuectl enqueue '{"id":"job5","command":"echo VIP"}' --priority 5 --run-at "3pm"
+```
+
 ---
 
 ## Start Workers
@@ -486,6 +564,12 @@ Add jobs:
 queuectl enqueue '{"id":"job1","command":"echo Hello"}'
 ```
 
+Add a scheduled job:
+
+```bash
+queuectl enqueue '{"id":"job2","command":"echo Later"}' --run-at 30
+```
+
 Check status:
 
 ```bash
@@ -517,6 +601,8 @@ The implementation has also been manually tested for the following scenarios:
 *  Priority-based job ordering
 *  Dashboard API endpoints
 *  Enqueuing jobs from the dashboard UI
+*  Scheduled jobs (`--run-at` with various formats)
+*  Job output logging (stdout, stderr, exit_code)
 
 ---
 
@@ -533,14 +619,14 @@ The implementation has also been manually tested for the following scenarios:
 * Business logic isolated from SQL
 * **Priority-based scheduling** via `ORDER BY priority DESC, created_at ASC`
 * **Web dashboard** (standalone Express server sharing the SQLite DB via WAL)
+* **Scheduled jobs** via `run_at` column and flexible date/time parser
+* **Job output logging** — stdout, stderr, exit_code persisted per job
 
 ---
 
 # Future Improvements
 
-* Scheduled jobs (`run_at`)
 * Job timeouts
-* Job output logging
 * Metrics / observability
 * Worker auto-scaling
 

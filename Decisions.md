@@ -361,6 +361,148 @@ The dashboard exposes the following endpoints:
 
 ---
 
+# 7. Scheduled Jobs — Implementation and Design
+
+Scheduled jobs have been implemented as a **bonus feature**.
+
+## Schema Change
+
+A `run_at` column was added to the `jobs` table:
+
+```sql
+run_at DATETIME
+```
+
+When `run_at` is `NULL`, the job is eligible for immediate execution (default behavior). When set to a future timestamp, the job remains in `pending` but is skipped by the claim query until the scheduled time arrives.
+
+## CLI
+
+The `enqueue` command accepts an optional `--run-at` (or `-r`) flag:
+
+```bash
+queuectl enqueue '{"id":"delayed","command":"echo later"}' --run-at 60
+queuectl enqueue '{"id":"afternoon","command":"echo hello"}' --run-at "2pm"
+queuectl enqueue '{"id":"future","command":"echo hello"}' --run-at "15-7-2026 2pm"
+```
+
+## Date/Time Parser
+
+A `runAtToDate()` function in `queue.service.js` converts user input to an ISO 8601 timestamp. It supports:
+
+1. **Seconds** — a plain integer is treated as a delay from now
+2. **Time today** — e.g. `2pm`, `2:30pm` (12-hour format with am/pm)
+3. **Date + time** — e.g. `15-7-2026 2pm` or `2026-07-15 2pm`
+4. **ISO 8601 / standard** — any string parseable by `Date.parse()`
+
+Invalid formats throw a descriptive error.
+
+## Why parse in the service layer?
+
+The parsing logic lives in the service layer rather than the CLI command because:
+
+- The dashboard REST API also needs to accept `run_at` values
+- Keeping the parser in the service layer avoids duplicating logic between CLI and API
+- The CLI layer remains a thin pass-through
+
+## Job Claiming
+
+The atomic claim query was updated to respect `run_at`:
+
+```sql
+WHERE (state = 'pending' AND (run_at IS NULL OR run_at <= @now))
+   OR (state = 'failed' AND next_retry_at <= @now)
+```
+
+Jobs whose `run_at` is still in the future are silently skipped. No additional polling or timer mechanism is needed — workers naturally pick up scheduled jobs on their next poll cycle after the scheduled time passes.
+
+## What survived unchanged?
+
+- Worker execution — unchanged
+- Graceful shutdown — unchanged
+- Heartbeat — unchanged
+- Crash recovery — unchanged
+- Retry logic — unchanged
+- Dead Letter Queue — unchanged
+- Priority ordering — unchanged (priority still takes precedence)
+
+Only three areas were modified:
+
+1. `schema.db.js` — added the `run_at` column
+2. `jobs.db.js` — added `run_at` to INSERT and updated the WHERE clause in the claim query
+3. `enqueue.command.js` — added the `--run-at` CLI option
+4. `queue.service.js` — added the `runAtToDate()` parser and passed `run_at` to the job object
+
+---
+
+# 8. Job Output Logging — Implementation and Design
+
+Job output logging has been implemented as a **bonus feature**.
+
+## Schema Change
+
+Three columns were added to the `jobs` table:
+
+```sql
+stdout TEXT,
+stderr TEXT,
+exit_code INTEGER
+```
+
+These columns are nullable and remain `NULL` until the job executes.
+
+## How it works
+
+The worker runtime (`runtime.js`) already receives `stdout`, `stderr`, and `exitCode` from the job executor. After marking the job as completed or failed, the worker calls `saveLog()` to persist the output:
+
+```js
+const data = await executeJob(job);
+if (data.success) handleSuccess(job);
+else handleFailure(job);
+saveLog({ ...data, id: job.id, now: new Date().toISOString() });
+```
+
+## Database Layer
+
+A `saveLog()` function in `jobs.db.js` updates the output columns:
+
+```sql
+UPDATE jobs
+SET stdout = @stdout, stderr = @stderr, exit_code = @exitCode, updated_at = @now
+WHERE id = @id
+```
+
+## Why store in the jobs table?
+
+Alternatives considered:
+
+1. **Separate `job_logs` table** — normalized but adds JOINs for every job query and complicates the dashboard
+2. **File-based logs** — avoids database bloat but introduces filesystem dependencies and makes the dashboard harder to implement
+3. **Inline in jobs table** — simple, no JOINs, and the output is always available when querying a job
+
+Option 3 was chosen because:
+
+- Output is always 1:1 with a job (not one-to-many)
+- The dashboard and CLI can display output without additional queries
+- SQLite handles TEXT columns efficiently
+- A `maxBuffer` of 5 MB limits the size of captured output
+
+## What survived unchanged?
+
+- Job claiming — unchanged
+- Retry logic — unchanged
+- Dead Letter Queue — unchanged
+- Priority ordering — unchanged
+- Scheduled jobs — unchanged
+- Supervisor architecture — unchanged
+
+Only three files were modified:
+
+1. `schema.db.js` — added `stdout`, `stderr`, `exit_code` columns
+2. `jobs.db.js` — added the `saveLog()` function
+3. `runtime.js` — added the `saveLog()` call after job execution
+
+---
+
 # Summary of Major Design Decisions
 
 - SQLite chosen for persistent storage and atomic writes.
@@ -374,3 +516,5 @@ The dashboard exposes the following endpoints:
 - SQL kept inside the database layer.
 - **Priority jobs** implemented via a `priority` column and `ORDER BY priority DESC, created_at ASC` in the claim query.
 - **Web dashboard** implemented as a standalone Express server sharing the same SQLite database via WAL mode.
+- **Scheduled jobs** implemented via a `run_at` column with a flexible date/time parser in the service layer.
+- **Job output logging** implemented by storing stdout, stderr, and exit_code directly in the jobs table.
