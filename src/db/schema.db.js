@@ -32,6 +32,8 @@ export function initializeSchema(db) {
             worker_id TEXT,
             next_retry_at DATETIME,
 
+            priority INTEGER NOT NULL DEFAULT 0,
+
             FOREIGN KEY (worker_id)
                 REFERENCES workers(id)
                 ON DELETE SET NULL

@@ -4,9 +4,11 @@ export function registerEnqueue(program) {
         .command("enqueue")
         .description("Add a new job")
         .argument("<job>", "Job JSON")
-        .action((jobPayload) => {
-             try {
-                const data = enqueueJob(jobPayload);
+        .option("-p, --priority <priority>", "Job priority","0")
+        .action((job,options) => {
+            try{
+                const priority = Number(options.priority);
+                const data = enqueueJob(job,priority);
                 console.log(data);
             } catch (err) {
                 console.error(err.message);
