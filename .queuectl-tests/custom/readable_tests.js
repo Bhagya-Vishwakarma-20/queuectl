@@ -1,8 +1,9 @@
 import {
     fullCleanup, sleep, enqueue, getJobs, startWorkersBackground,
     stopWorkersAndWait, killProcessTree, configSet, waitForJobState,
-    getStatus, dlqList, dlqRetry, configList
+    getStatus, dlqList, dlqRetry, configList, waitForAllJobsInState
 } from '../helpers.js';
+import fs from 'fs';
 
 async function runTests() {
     let passed = 0;
@@ -177,6 +178,53 @@ async function runTests() {
         const found = pendingJobs.find(j => j.id === 'dlq-list-1');
         if (!found) throw new Error("Job was not moved to pending after dlq retry");
     });
+
+    await test("Priority Order", async () => {
+        const logPath = './priority_order.log';
+        if (fs.existsSync(logPath)) {
+            try { fs.unlinkSync(logPath); } catch {}
+        }
+
+        // Enqueue jobs in a mixed order of priorities and creation times
+        // Job C: Priority 5 (Lowest)
+        await enqueue({ id: 'job-c', command: `node -e "require('fs').appendFileSync('${logPath.replace(/\\/g, '/')}', 'C\\n')"` }, 5);
+        await sleep(100); // ensure different creation times
+        
+        // Job B: Priority 10
+        await enqueue({ id: 'job-b', command: `node -e "require('fs').appendFileSync('${logPath.replace(/\\/g, '/')}', 'B\\n')"` }, 10);
+        await sleep(100);
+        
+        // Job A: Priority 10 (Same priority as B, but created later, so should run AFTER B)
+        await enqueue({ id: 'job-a', command: `node -e "require('fs').appendFileSync('${logPath.replace(/\\/g, '/')}', 'A\\n')"` }, 10);
+        await sleep(100);
+        
+        // Job D: Priority 20 (Highest)
+        await enqueue({ id: 'job-d', command: `node -e "require('fs').appendFileSync('${logPath.replace(/\\/g, '/')}', 'D\\n')"` }, 20);
+
+        // Start worker
+        const worker = startWorkersBackground(1);
+
+        // Wait for all four jobs to be completed
+        const completed = await waitForAllJobsInState('completed', 4, 15000);
+        if (!completed) throw new Error("Not all priority jobs completed in time");
+
+        // Clean up worker
+        await stopWorkersAndWait(worker);
+
+        // Read the logged order
+        const logContent = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => line.trim());
+        
+        // Expected order: D (priority 20) -> B (priority 10, FIFO first) -> A (priority 10, FIFO second) -> C (priority 5)
+        const expectedOrder = ['D', 'B', 'A', 'C'];
+        
+        if (JSON.stringify(logContent) !== JSON.stringify(expectedOrder)) {
+            throw new Error(`Priority order mismatch! Expected: ${expectedOrder.join(', ')}. Got: ${logContent.join(', ')}`);
+        }
+
+        // Clean up the log file
+        try { fs.unlinkSync(logPath); } catch {}
+    });
+
     console.log(`\nTests completed. ${passed} passed, ${failed} failed.`);
     process.exit(failed > 0 ? 1 : 0);
 }
