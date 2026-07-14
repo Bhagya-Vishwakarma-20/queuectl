@@ -115,9 +115,15 @@ const modalOverlay = document.getElementById("modal-overlay");
 const modalBody = document.getElementById("modal-body");
 const modalTitle = document.getElementById("modal-title");
 
-function openModal(title, contentHtml) {
+function openModal(title, contentHtml, isLarge = false) {
     modalTitle.textContent = title;
     modalBody.innerHTML = contentHtml;
+    const modalEl = document.getElementById("modal");
+    if (isLarge) {
+        modalEl.classList.add("modal-large");
+    } else {
+        modalEl.classList.remove("modal-large");
+    }
     modalOverlay.classList.add("open");
     if (window.lucide) {
         window.lucide.createIcons();
@@ -321,9 +327,12 @@ async function renderOverview(container) {
 
             <div class="overview-grid">
                 <div class="activity-card">
-                    <div class="activity-header">
-                        <span class="activity-title">Execution Queue & Activity</span>
-                        <a href="#jobs" class="view-all-link">View all →</a>
+                    <div class="activity-header" style="display:flex; flex-direction:column; align-items:flex-start; gap:4px;">
+                        <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                            <span class="activity-title">Execution Queue & Activity</span>
+                            <a href="#jobs" class="view-all-link">View all →</a>
+                        </div>
+                        <span style="font-size:0.75rem; color:var(--text-muted);">💡 Click on any job row below to view details and execution logs</span>
                     </div>
                     <div class="data-table-wrapper">
                         ${recentJobs.length === 0
@@ -473,8 +482,11 @@ async function renderJobs(container) {
 
         container.innerHTML = `
             <div class="table-card">
-                <div class="table-header">
-                    <span class="table-title">All Jobs</span>
+                <div class="table-header" style="flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <span class="table-title">All Jobs</span>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">💡 Click on any job row below to view details and execution logs</div>
+                    </div>
                     <div class="filter-pills">
                         ${states.map((s, i) => `
                             <button class="filter-pill ${currentJobFilter === s ? "active" : ""}"
@@ -541,27 +553,61 @@ window.showJobDetail = async function (id) {
             ["State", `<span class="status-badge ${job.state}">${job.state}</span>`],
             ["Attempts", `${job.attempts} / ${job.max_retries}`],
             ["Worker ID", job.worker_id || "—"],
+            ["Exit Code", job.exit_code !== null && job.exit_code !== undefined ? job.exit_code : "—"],
             ["Scheduled Run (IST)", formatIndianTime(job.run_at)],
             ["Next Retry (IST)", job.next_retry_at ? formatIndianTime(job.next_retry_at) : "—"],
             ["Created At (IST)", formatIndianTime(job.created_at)],
             ["Updated At (IST)", formatIndianTime(job.updated_at)],
         ];
 
-        openModal(
-            "Job Details",
-            rows
-                .map(
-                    ([label, value]) => `
-                <div class="modal-detail-row">
-                    <span class="modal-detail-label">${label}</span>
-                    <span class="modal-detail-value">${
-                        label === "State" ? value : escapeHtml(value)
-                    }</span>
-                </div>
-            `
-                )
-                .join("")
-        );
+        const detailsHtml = `
+            <div class="modal-details-list">
+                ${rows.map(([label, value]) => `
+                    <div class="modal-detail-row">
+                        <span class="modal-detail-label">${label}</span>
+                        <span class="modal-detail-value">${
+                            label === "State" ? value : escapeHtml(value)
+                        }</span>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+
+        const stdoutHtml = job.stdout 
+            ? `<pre class="log-terminal stdout">${escapeHtml(job.stdout)}</pre>`
+            : `<div class="log-empty">No stdout logs available for this job.</div>`;
+
+        const stderrHtml = job.stderr 
+            ? `<pre class="log-terminal stderr">${escapeHtml(job.stderr)}</pre>`
+            : `<div class="log-empty">No stderr logs available for this job.</div>`;
+
+        const modalHtml = `
+            <div class="modal-tabs">
+                <div class="modal-tab " data-tab="details">Details</div>
+                <div class="modal-tab active" data-tab="stdout">Stdout Log</div>
+                <div class="modal-tab" data-tab="stderr">Stderr Log</div>
+            </div>
+            <div class="modal-tab-contents">
+                <div class="tab-content " id="tab-details">${detailsHtml}</div>
+                <div class="tab-content active" id="tab-stdout">${stdoutHtml}</div>
+                <div class="tab-content" id="tab-stderr">${stderrHtml}</div>
+            </div>
+        `;
+
+        openModal("Job Details & Logs", modalHtml, true);
+
+        // Bind tab click handlers
+        const tabs = document.querySelectorAll(".modal-tab");
+        tabs.forEach(tab => {
+            tab.addEventListener("click", () => {
+                tabs.forEach(t => t.classList.remove("active"));
+                document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+                
+                tab.classList.add("active");
+                const targetTab = tab.dataset.tab;
+                document.getElementById(`tab-${targetTab}`).classList.add("active");
+            });
+        });
     } catch (err) {
         showToast(err.message, "error");
     }
@@ -577,7 +623,7 @@ async function renderDLQ(container) {
                 <div class="table-header">
                     <div>
                         <span class="table-title">Dead Letter Queue</span>
-                        <div class="section-subtitle">Jobs that have exhausted all retry attempts</div>
+                        <div class="section-subtitle">Jobs that have exhausted all retry attempts. Click on a job row to view details & error logs.</div>
                     </div>
                 </div>
                 <div class="data-table-wrapper">
@@ -595,13 +641,13 @@ async function renderDLQ(container) {
                             </thead>
                             <tbody>
                                 ${jobs.map((j) => `
-                                    <tr>
+                                    <tr class="clickable-row" onclick="showJobDetail('${escapeHtml(j.id)}')">
                                         <td class="cell-id" title="${escapeHtml(j.id)}">${escapeHtml(truncate(j.id, 24))}</td>
                                         <td class="cell-command" title="${escapeHtml(j.command)}">${escapeHtml(truncate(j.command, 35))}</td>
                                         <td style="color:var(--text-secondary)">${j.attempts}/${j.max_retries}</td>
                                         <td class="cell-time">${relativeTime(j.updated_at)}</td>
                                         <td>
-                                            <button class="btn btn-primary btn-sm" onclick="retryDlqJob('${escapeHtml(j.id)}')">
+                                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); retryDlqJob('${escapeHtml(j.id)}')">
                                                 ↻ Retry
                                             </button>
                                         </td>

@@ -34,6 +34,9 @@ export function initializeSchema(db) {
 
             priority INTEGER NOT NULL DEFAULT 0,
             run_at DATETIME,
+            stdout TEXT,
+            stderr TEXT,
+            exit_code INTEGER,
 
             FOREIGN KEY (worker_id)
                 REFERENCES workers(id)

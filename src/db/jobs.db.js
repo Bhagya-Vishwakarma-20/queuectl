@@ -233,4 +233,24 @@ export const retryDeadJob = (id)=>{
         }
 }
 
+// save logs of job
+
+const saveLogSmtm = db.prepare(`
+        UPDATE jobs
+        SET
+        stdout = @stdout,
+        stderr = @stderr,
+        exit_code = @exitCode,
+        updated_at= @now
+        WHERE (id=@id )
+    `)
+export const saveLog = (data)=>{
+        try{
+            saveLogSmtm.run(data);
+        }
+        catch(err){
+            console.error(err);
+        }
+}
+
 

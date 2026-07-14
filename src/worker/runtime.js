@@ -2,7 +2,7 @@
 import { randomUUID } from "crypto";
 import process from "process";
 import { createWorker, deleteWorker, updateHeartbeat } from "../db/workers.db.js";
-import { claimNextPendingJob, markFailed } from "../db/jobs.db.js";
+import { claimNextPendingJob, markFailed, saveLog } from "../db/jobs.db.js";
 import { executeJob } from "./executer.js";
 import { handleFailure, handleSuccess } from "../services/jobs.service.js";
 
@@ -45,9 +45,11 @@ const startWorker = async () => {
             await new Promise(resolve => setTimeout(()=>resolve(), POLL_INTERVAL));
             continue;
         }
-        const success = await executeJob(job);
-        if (success) handleSuccess(job);
+        const data = await executeJob(job);
+        if (data.success) handleSuccess(job);
         else handleFailure(job);
+        saveLog({...data,id:job.id,now:new Date().toISOString()});
+        console.log(data);
     }
     //cleaning
     clearInterval(heartbeatInterval);
